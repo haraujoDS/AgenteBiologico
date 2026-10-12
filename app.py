@@ -178,7 +178,7 @@ def gerar_resposta_sintese(pergunta: str, contexto: str, origem: str) -> str:
             model_name="gemini-3.8-flash",
             generation_config={"temperature": 0.2, "max_output_tokens": 2048}
         )
-        resposta = modelo.generate_content(prompt_completo, request_options={"timeout": 25})
+        resposta = modelo.generate_content(prompt_completo, request_options={"timeout": 90})
         return resposta.text.strip()
     except Exception as e:
         return f"Falha na comunicação com a API do Gemini. Detalhes: {str(e)}"
