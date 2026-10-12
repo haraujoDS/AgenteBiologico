@@ -242,7 +242,7 @@ if "historico" not in st.session_state:
 for msg in st.session_state.historico:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
-        if "fontes" in msg and msg["fontes"]:
+        if msg.get("fontes"):
             with st.expander(f"📚 Evidências ({msg.get('origem', '')})"):
                 for f in msg["fontes"]:
                     st.write(f"- {f}")
@@ -253,7 +253,7 @@ if prompt := st.chat_input("Digite sua dúvida técnica..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Analisando acervo do laboratório e literatura..."):
+        with st.spinner("Pesquisando acervo e bases biomédicas..."):
             resultado = agente_decisor(prompt, rag_service)
             texto = resultado["resposta"]
             fontes = resultado["fontes"]
