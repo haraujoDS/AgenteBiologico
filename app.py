@@ -175,7 +175,7 @@ def gerar_resposta_sintese(pergunta: str, contexto: str, origem: str) -> str:
 
     try:
         modelo = genai.GenerativeModel(
-            model_name="gemini-3.8-flash",
+            model_name="gemini-1.5-flash",
             generation_config={"temperature": 0.2, "max_output_tokens": 2048}
         )
         resposta = modelo.generate_content(prompt_completo, request_options={"timeout": 90})
