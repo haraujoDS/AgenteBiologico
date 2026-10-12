@@ -160,68 +160,70 @@ def consultar_pubmed_api(termo: str, max_resultados: int = 2) -> List[Dict[str, 
         return []
 
 
-def gerar_resposta_sintese(pergunta: str, contexto: str, origem: str) -> str:
-    prompt_completo = (
-        "Você é um cientista e bioinformata sênior especializado em engenharia genética de "
-        "Komagataella phaffii (Pichia pastoris), desenho de vetores e biologia sintética.\n\n"
-        "Diretrizes:\n"
-        "1. Responda estritamente com base no contexto técnico fornecido abaixo.\n"
-        "2. Seja claro, direto e cientificamente rigoroso (destaque linhagens, genes, vetores e fenótipos mencionados).\n"
-        "3. Não invente metodologias ou dados ausentes no contexto.\n\n"
-        f"Origem das evidências: {origem}\n\n"
-        f"Contexto recuperado:\n\"\"\"\n{contexto}\n\"\"\"\n\n"
-        f"Pergunta do usuário: {pergunta}"
-    )
-
-    try:
-        modelo = genai.GenerativeModel(
-            model_name="gemini-3.8-flash",
-            generation_config={"temperature": 0.2, "max_output_tokens": 2048}
-        )
-        resposta = modelo.generate_content(prompt_completo, request_options={"timeout": 90})
-        return resposta.text.strip()
-    except Exception as e:
-        return f"Falha na comunicação com a API do Gemini. Detalhes: {str(e)}"
+def resposta_inconclusiva(texto: str) -> bool:
+    """Detecta se o modelo indicou que o contexto local não contém a informação."""
+    padroes = [
+        "não há informações",
+        "não foram encontradas informações",
+        "o contexto não aborda",
+        "o material disponibilizado restringe-se",
+        "não menciona",
+        "ausentes do material fornecido",
+        "não contém detalhes",
+        "não é possível responder",
+        "informações ausentes"
+    ]
+    texto_lower = texto.lower()
+    return any(p in texto_lower for pmin in [p for p in padroes]) or any(p in texto_lower for p in padroes)
 
 
 def agente_decisor(pergunta: str, rag: MotorRAG) -> Dict[str, Any]:
+    # 1. TENTATIVA LOCAL (PDFs)
     trechos_locais = rag.buscar(pergunta, top_k=2)
 
     if trechos_locais:
-        fontes = [t["fonte"] for t in trechos_locais]
+        fontes_locais = [t["fonte"] for t in trechos_locais]
         maior_score = trechos_locais[0]["score"]
         contexto_combinado = "\n\n---\n\n".join(
             [f"[Fonte: {t['fonte']}]: {t['texto']}" for t in trechos_locais]
         )
-        resposta_final = gerar_resposta_sintese(
+        resposta_local = gerar_resposta_sintese(
             pergunta, contexto_combinado, "Documentos Técnicos Locais (Teses e Artigos)"
         )
-        return {
-            "origem": "RAG Local (Teses & Artigos)",
-            "fontes": list(set(fontes)),
-            "score": maior_score,
-            "resposta": resposta_final
-        }
 
-    artigos_externos = consultar_pubmed_api(pergunta, max_resultados=2)
+        # Se a resposta local for conclusiva, retorna diretamente os dados locais
+        if not resposta_inconclusiva(resposta_local):
+            return {
+                "origem": "RAG Local (Teses & Artigos)",
+                "fontes": list(set(fontes_locais)),
+                "score": maior_score,
+                "resposta": resposta_local
+            }
+
+    # 2. FALLBACK AUTOMÁTICO PARA O PUBMED (Caso não ache ou não responda pelo PDF)
+    artigos_externos = consultar_pubmed_api(pergunta, max_resultados=3)
     if artigos_externos:
-        fontes = [a["fonte"] for a in artigos_externos]
+        fontes_pubmed = [a["fonte"] for a in artigos_externos]
         contexto_externo = "\n".join([f"- {a['titulo']} ({a['fonte']})" for a in artigos_externos])
-        resposta_final = gerar_resposta_sintese(
+        resposta_pubmed = gerar_resposta_sintese(
             pergunta, contexto_externo, "API Externa do PubMed / NCBI"
         )
-        return {
-            "origem": "API Externa (PubMed / NCBI)",
-            "fontes": fontes,
-            "score": 0.50,
-            "resposta": resposta_final
-        }
 
+        # Verifica se o PubMed conseguiu responder
+        if not resposta_inconclusiva(resposta_pubmed):
+            return {
+                "origem": "API Externa (PubMed / NCBI)",
+                "fontes": fontes_pubmed,
+                "score": 0.50,
+                "resposta": resposta_pubmed
+            }
+
+    # 3. CASO NÃO ACHE EM NENHUM DOS DOIS
     return {
         "origem": "Sem Evidências",
         "fontes": [],
         "score": 0.0,
-        "resposta": "Não foram localizadas informações suficientes sobre essa consulta nos PDFs locais nem no PubMed."
+        "resposta": "Não foram localizadas informações suficientes sobre essa consulta nem no acervo de teses locais, nem na literatura científica indexada no PubMed."
     }
 
 # ==============================================================================
