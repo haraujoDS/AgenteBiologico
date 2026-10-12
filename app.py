@@ -110,7 +110,7 @@ class MotorRAG:
 
         for idx in indices_ordenados[:top_k]:
             score = float(similaridades[idx])
-            if score >= 0.18:
+            if score >= 0.22:
                 resultados.append({
                     "texto": self.fragmentos[idx]["texto"],
                     "fonte": self.fragmentos[idx]["fonte"],
